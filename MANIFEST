@@ -1,0 +1,8 @@
+Build.PL
+darcs-notify
+lib/Darcs/Notify.pm
+LICENSE.Artistic
+LICENSE.GPL
+MANIFEST			This list of files
+META.yml
+README
