@@ -1,19 +1,23 @@
 ---
 name: Darcs-Notify
-version: 1.0
+version: 2.0
 author:
   - 'David Caldwell <david@porkrind.org>'
-abstract: Send emails when a Darcs repository has patches added or removed
+abstract: Do something cool when a Darcs repository has patches added or removed
 license: perl
 resources:
   license: http://dev.perl.org/licenses/
 requires:
-  Darcs::Inventory: 1.0
-  IPC::Run: 0
+  Darcs::Inventory: 1.1
+  Mail::Send: 0
 provides:
   Darcs::Notify:
     file: lib/Darcs/Notify.pm
-    version: 1.0
+    version: 2.0
+  Darcs::Notify::Base:
+    file: lib/Darcs/Notify/Base.pm
+  Darcs::Notify::Email:
+    file: lib/Darcs/Notify/Email.pm
 generated_by: Module::Build version 0.2806
 meta-spec:
   url: http://module-build.sourceforge.net/META-spec-v1.2.html

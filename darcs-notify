@@ -5,23 +5,24 @@ use warnings;
 use strict;
 use Getopt::Long;
 use Darcs::Notify;
+use Pod::Usage;
 
 my $smtp_server = "localhost";
-my $help;
 my $repo = '.';
 GetOptions('smtp-server=s' => \$smtp_server,
            'r|repo=s'      => \$repo,
-           'h|help'        => \$help)
-    and scalar @ARGV and !$help or die "usage: $0 [--smtp-server=...] [-r | --repo=...] <email> [<email> ...]\n";
+           'h|help'        => sub { pod2usage(0) })
+    and scalar @ARGV or pod2usage();
 
 my @group = @ARGV;
 
 
-darcs_notify(smtp_server => $smtp_server,
-             email => [@group],
-             repo => $repo);
+Darcs::Notify->new(repo => $repo,
+                   Email => { smtp_server => $smtp_server, to => [@group] })
+    ->notify;
 
 __END__
+
 =head1 NAME
 
 darcs-notify - Report darcs repository changes to an email list

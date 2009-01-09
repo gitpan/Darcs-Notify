@@ -1,36 +1,49 @@
 #!/usr/bin/perl
 # Copyright (c) 2007-2009 David Caldwell,  All Rights Reserved. -*- perl -*-
 
-package Darcs::Notify; use strict; use warnings;
-our $VERSION = '1.0';
-our @EXPORT = qw(darcs_notify);
+package Darcs::Notify; use base qw(Class::Accessor::Fast); use strict; use warnings;
+our $VERSION = '2.0';
 
-use IPC::Run qw(run);
+Darcs::Notify->mk_accessors(qw(repo repo_name));
+
 use Darcs::Inventory;
 use Darcs::Inventory::Diff;
 use Cwd;
 use File::Basename;
+use File::Copy "cp";
 
-sub darcs_notify(%) {
-    my %option = @_;
-    $option{repo}      ||= '.';
-    $option{repo_name} ||= basename $option{repo} eq '.' ? cwd : $option{repo};
-    $option{unpull}    ||= \&darcs_notify_unpull;
-    $option{new}       ||= \&darcs_notify_new;
+sub new($%) {
+    my ($class, %option) = @_;
+    my $self = bless { repo => $option{repo} || '.' }, $class;
+    $self->{repo_name} ||= basename $self->{repo} eq '.' ? cwd : $self->{repo};
 
-    mkdir "$option{repo}/_darcs/third-party";
-    mkdir "$option{repo}/_darcs/third-party/darcs-notify";
+    # Remove the options we used from our options hash. What's left should only be notifiers.
+    delete $option{$_} for keys %$self;
+    for (keys %option) {
+        my $class = "Darcs::Notify::$_";
+        $class->isa('Darcs::Notify::Base') or eval "use $class; 1" or die "Couldn't load $_ ($class): $!\n";
+        push @{$self->{notifier}}, $class->new(%{$option{$_}});
+    }
+    die "No notifiers passed to $class->new()! Please read the perldoc Darcs::Notify.\n" unless scalar @{$self->{notifier}};
+    $self;
+}
 
-    my $old_inventory = "$option{repo}/_darcs/third-party/darcs-notify-old-inventory";
+sub notify($){
+    my ($self) = @_;
+    mkdir "$self->{repo}/_darcs/third-party";
+    mkdir "$self->{repo}/_darcs/third-party/darcs-notify";
+
+    # This path is only here for legacy repos.
+    my $old_inventory = "$self->{repo}/_darcs/third-party/darcs-notify-old-inventory";
     # http://www.mail-archive.com/darcs-users@darcs.net/msg01347.html
-    $old_inventory = "$option{repo}/_darcs/third-party/darcs-notify/old-inventory" unless -f $old_inventory;
+    $old_inventory = "$self->{repo}/_darcs/third-party/darcs-notify/old-inventory" unless -f $old_inventory;
 
     my $pre  = Darcs::Inventory->load($old_inventory);
-    my $post = Darcs::Inventory->new($option{repo}) or die "Couldn't get inventory from $option{repo}";
+    my $post = Darcs::Inventory->new($self->{repo}) or die "Couldn't get inventory from $self->{repo}";
 
     my ($new, $unpull) = Darcs::Inventory::Diff::diff($pre, $post);
 
-    system(qw"cp -f", $post->file, $old_inventory);
+    cp($post->file, $old_inventory);
     if (!$pre) {
         warn "Not sending any patch notifications on first run.\n".
             "'echo > \"$old_inventory\"' and re-run darcs-notify if you want notifications for your current ".
@@ -38,53 +51,10 @@ sub darcs_notify(%) {
         return;
     }
 
-    $option{unpull}->(\%option, $unpull) if scalar @$unpull;
-    $option{new}   ->(\%option, $new)    if scalar @$new;
-}
-
-use Mail::Send;
-sub darcs_notify_unpull(\%$) {
-    my ($option, $unpull) = @_;
-    my @group = @{$option->{email}};
-    my $msg = new Mail::Send Subject=>"[Unpulled patches]";
-    $msg->to(@group);
-    #$ENV{MAILADDRESS} = $p->author;
-    $msg->set("Reply-To", @group);
-    $msg->set("Content-Type", ' text/plain; charset="utf-8"');
-    $msg->set("X-Darcs-Notify", $option->{repo_name});
-    my $fh = $msg->open('smtp', Server=>$option->{smtp_server} || 'localhost') or die "$!";
-    #my $fh = $msg->open('testfile') or die "$!";
-    print $fh "Unpulled:\n\n";
-    print $fh join "\n", map { $_->as_string } @$unpull;
-    $fh->close or die "no mail!";
-    print "Sent unpull mail to @group\n";
-}
-
-sub darcs_notify_new(\%$) {
-    my ($option, $new) = @_;
-    my @group = @{$option->{email}};
-    # New patches each get their own email:
-    foreach my $p (@$new) {
-        my $blurb = $p->as_string;
-        my ($diff, $diffstat, $error);
-        run([qw(darcs diff -u --match), "hash ".$p->hash], '>', \$diff, '2>', \$error) or die "$error\n";
-        run([qw(diffstat)], '<', \$diff, '>', \$diffstat, '2>', \$error) or die "$error\n";
-
-        my $name = ($p->undo?"UNDO: ":"").$p->name;
-        my $msg = new Mail::Send Subject=>$name;
-        $msg->to(@group);
-        $ENV{MAILADDRESS} = $p->author;
-        $msg->set("Reply-To", @group);
-        $msg->set("Content-Type", ' text/plain; charset="utf-8"');
-        $msg->set("X-Darcs-Notify", $option->{repo_name});
-        my $fh = $msg->open('smtp', Server=>$option->{smtp_server} || 'localhost') or die "$!";
-        #my $fh = $msg->open('testfile') or die "$!";
-        print $fh "$blurb\n";
-        print $fh "$diffstat\n";
-        print $fh "$diff\n";
-        $fh->close or die "no mail!";
-        print "Sent $name to @group\n";
+    for (@{$self->{notifier}}) {
+        $_->notify($self, $new, $unpull);
     }
+    scalar @$new || scalar @$unpull;
 }
 
 1;
@@ -92,32 +62,54 @@ __END__
 
 =head1 NAME
 
-Darcs::Notify - Send emails when a Darcs repository has patches added or removed
+Darcs::Notify - Do something cool when a Darcs repository has patches added or removed
 
 =head1 SYNOPSIS
 
- darcs_notify(smtp_server => "smtp.example.com",
-              email => ["user1@example.com", "user2@example.com"],
-              repo => "/path/to/my/repo");
+ use Darcs::Notify;
+ $n = Darcs::Notify->new(repo => "/path/to/my/repo",
+                         Email => { # Autoloads Darcs::Notify::Email
+                                    to => ["user1@example.com",
+                                           "user2@example.com"],
+                                    smtp_server => "smtp.example.com" });
+ $n->notify;
+
+ # If you have other plug-ins installed you can have many notifiers at once.
+ Darcs::Notify->new(repo => "/path/to/my/repo",
+                    Email => { # Autoloads Darcs::Notify::Email
+                               to => ["user1@example.com",
+                                      "user2@example.com"],
+                               smtp_server => "smtp.example.com" },
+                    IRC => { # Autoloads Darcs::Notify::IRC (if you have it)
+                             server => irc.example.com,
+                             channel => "#darcs_notify" })
+     ->notify;
 
 =head1 DESCRIPTION
 
 B<Darcs::Notify> compares the list of patches in a darcs repository
-against a saved backup copy and sends emails about the changes. The
-backup copy is stored in the file
-F<_darcs/third-party/darcs-notify/old-inventory>.
+against a saved backup copy (stored in the file
+F<_darcs/third-party/darcs-notify/old-inventory>) and does "something
+cool and useful" when it detects added or removed patches. I'm being
+cagey about exactly what is done because Darcs::Notify lets you pass
+in arbitrary notification methods so that can customize it to you
+liking. L<Darcs::Notify::Email> is the quintessential notifier that
+sends email notifications to a list of email addresses.
+
+Normal users will probably just want to use the command line script
+L<darcs-notify>, which is a front end to L<Darcs::Notify> and
+L<Darcs::Notify::Email>.
 
 =head1 FUNCTIONS
 
-The following functions are exported from the B<Darcs::Notify>
-module by default.
-
 =over 4
 
-=item B<C<darcs_notify(options)>>
+=item B<C<new(options, notifiers)>>
 
-This implements the B<Darcs::Notify> functionality. It accepts a
-number of hash style options:
+This creates a new Darcs::Notify object. All options and notifiers are
+passed in hash-style.
+
+The options are:
 
 =over 4
 
@@ -132,40 +124,34 @@ By default C<&darcs_notify> will guess the name of the repo from the
 path name. If you'd like to override its guess, pass in the repo_name
 parameter.
 
-=item B<new> => sub { ... }
-
-=item B<unpull> => sub { ... }
-
-You can override the standard email notification by passing a
-subroutine ref to unpull or new. They both have the same interface:
-
- sub darcs_notify_unpull($$) {
-     my ($option, $patches) = @_;
-     ...
- }
-
-$option is a reference to the option hash passed to L<darcs_notify>.
-
-$patches is a reference to an array of L<Darcs::Inventory::Patch> objects.
-
-=item B<email> => ["email@example.com", email2@example.com]
-
-This is reference to an array of email addresses. This is used by the
-default unpull and new patch notification routines.
-
-=item B<smtp_server> => "localhost"
-
-This is reference to an array of email addresses. This is used by the
-default unpull and new patch notification routines. It defaults to
-localhost if you do not pass the option.
-
 =back
+
+The notifiers are passed in the same way, but interpretted
+differently. Take the following notify parameter example:
+
+    Email => { smtp_address => "smtp.example.com" }
+
+This will cause Darcs::Notify to try to load
+L<Darcs::Notify::Email>. If that succeeds it will call
+Darcs::Notify::Email->new(smtp => "smtp.example.com") and save the
+resulting object in its list of notifiers.
+
+In this manner you can extend Darcs::Notify with arbitrary
+notification classes. See L<Darcs::Notify::Base> for more info.
+
+=item B<C<notify()>>
+
+This does the actual notifying. It will compute the differences
+between the repo's current inventory and the last saved inventory and
+call the notify function of the notifiers that were registered in the
+B<new()> function.
 
 =back
 
 =head1 SEE ALSO
 
-L<darcs-notify>, L<Darcs::Inventory::Patch>, L<Darcs::Inventory>
+L<darcs-notify>, L<Darcs::Notify::Base>, L<Darcs::Notify::Email>,
+L<Darcs::Inventory::Patch>, L<Darcs::Inventory>
 
 =head1 COPYRIGHT
 
