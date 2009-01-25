@@ -2,7 +2,7 @@
 # Copyright (c) 2007-2009 David Caldwell,  All Rights Reserved. -*- perl -*-
 
 package Darcs::Notify; use base qw(Class::Accessor::Fast); use strict; use warnings;
-our $VERSION = '2.0';
+our $VERSION = '2.0.1';
 
 Darcs::Notify->mk_accessors(qw(repo repo_name));
 
@@ -92,7 +92,7 @@ against a saved backup copy (stored in the file
 F<_darcs/third-party/darcs-notify/old-inventory>) and does "something
 cool and useful" when it detects added or removed patches. I'm being
 cagey about exactly what is done because Darcs::Notify lets you pass
-in arbitrary notification methods so that can customize it to you
+in arbitrary notification methods so that you can customize it to you
 liking. L<Darcs::Notify::Email> is the quintessential notifier that
 sends email notifications to a list of email addresses.
 
@@ -133,7 +133,7 @@ differently. Take the following notify parameter example:
 
 This will cause Darcs::Notify to try to load
 L<Darcs::Notify::Email>. If that succeeds it will call
-Darcs::Notify::Email->new(smtp => "smtp.example.com") and save the
+Darcs::Notify::Email->new(smtp_address => "smtp.example.com") and save the
 resulting object in its list of notifiers.
 
 In this manner you can extend Darcs::Notify with arbitrary

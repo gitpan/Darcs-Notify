@@ -5,6 +5,8 @@ lib/Darcs/Notify/Base.pm
 lib/Darcs/Notify/Email.pm
 LICENSE.Artistic
 LICENSE.GPL
+Changes
 MANIFEST			This list of files
 META.yml
 README
+t/basic.t

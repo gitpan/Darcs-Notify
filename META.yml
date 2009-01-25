@@ -1,6 +1,6 @@
 ---
 name: Darcs-Notify
-version: 2.0
+version: 2.0.1
 author:
   - 'David Caldwell <david@porkrind.org>'
 abstract: Do something cool when a Darcs repository has patches added or removed
@@ -13,7 +13,7 @@ requires:
 provides:
   Darcs::Notify:
     file: lib/Darcs/Notify.pm
-    version: 2.0
+    version: 2.0.1
   Darcs::Notify::Base:
     file: lib/Darcs/Notify/Base.pm
   Darcs::Notify::Email:

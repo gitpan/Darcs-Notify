@@ -46,7 +46,7 @@ Darcs::Notify::Base - Base class for notifiers
 This is the base class for making custom L<Darcs::Notify>
 notifiers. Subclass this and make sure that your package name is in
 the Darcs::Notify hierarchy. Pass the last part of your package name
-to B<< L<Darcs::Notify>->new() >>. If your package is called
+to B<< L<Darcs::Notify>->new() >> to have it use your package. If your package is called
 B<Darcs::Notify::Something> then you would pass something like S<< B<< C<<
 Something => { my_option1 => 1, my_option2 => 2 } >> >> >>.  B<<
 L<Darcs::Notify>->new() >> will load your subclass if it is not
@@ -63,19 +63,21 @@ This instantiates your object. Generally you won't I<need> to override
 this class, but you may I<want> to in order to check that the options
 are valid, for instance.
 
-The base class will put all the options passed to it into the B<$self>
-blessed hash.
+The B<< Darcs::Notify::Base->new() >> will put all the options passed
+to it into the B<$self> blessed hash, but there is no requirement that
+your class has to work this way.
 
 =item B<< $self->notify($notify, [@new_patches], [@unpulled_patches]) >>
 
-This function does the actual notifying. The subroutine defined in
+This does the actual notifying. The subroutine defined in
 this module is just a stub and only prints some debugging
 information. Normally your subclass overrides this to do whatever
 notifications you'd like. See L<Darcs::Notify::Email> which is the
 only subclass that comes with Darcs::Notify at the moment.
 
-The first parameter passed is the $self hash ref. Any options you pass
-to B<notify> will end up in the $self hash ref.
+The first parameter passed is the $self hash ref. If you don't
+override the B<new()> function, any options you pass to B<new()> will
+end up in the $self hash ref.
 
 The second parameter is a reference to the L<Darcs::Notify>
 object. You can use this to query the repo_name, for instance.
